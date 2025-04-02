@@ -1,0 +1,113 @@
+name: Run code validation checks
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  actions: read
+
+jobs:
+  validate:
+    name: Run code validation checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: ./.github/workflows/setup-go
+        id: setup-go
+        with:
+          owner: ${{ github.repository_owner }}
+
+      - name: Install `govulncheck` and `gopls`
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@v0.18.0
+          go install go.abhijithota.me/modfmt@v0.0.0-20240612144032-137c1c9de4fe
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Validate go.mod
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go mod tidy -go=${{ steps.setup-go.outputs.go-mod-version }}
+          git diff --exit-code || \
+            (
+              echo '::error file=go.mod,line=1,endLine=1,title=Incorrect dependencies::Please run "go mod tidy"' \
+              && exit 1
+            )
+
+      - name: Validate go.mod blocks
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          cat <<< "$(modfmt go.mod)" > go.mod
+          git diff --exit-code || \
+            (
+              echo '::error file=go.mod,line=1,endLine=1,title=Incorrect formatting of go.mod::Please run "cat <<< "$(modfmt go.mod)" > go.mod"' \
+              && exit 1
+            )
+
+      - name: Go Format
+        run: |
+          gofmt -s -w .
+          git diff --exit-code ||
+            (echo '::error title=Incorrect Go Format::Please run "gofmt -s -w ."' && exit 1)
+
+      - name: Go Generate
+        run: |
+          go generate ./...
+          git diff --exit-code || \
+            (echo '::error title=Incorrect Generated Files::Please run "go generate ./..."' && exit 1)
+
+      # --
+      # Go Vulncheck
+
+      - name: Run `govulncheck`
+        id: govulncheck
+        shell: bash {0} # disable fast fail / set -e
+        run: |
+          result=$(govulncheck ./...)
+          retVal=$?
+          if [ ${retVal} -ne 0 ]; then
+            {
+              echo 'result<<EOF'
+              echo "${result}" | awk '{print "> "$0}'
+              echo EOF
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment PR with vulnerabilities
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3
+        with:
+          comment-tag: govulncheck
+          mode: ${{ steps.govulncheck.outputs.result != '' && 'upsert' || 'delete' }}
+          message: |
+            > [!IMPORTANT]
+            > ## :warning: Found vulnerabilities :warning:
+            > ```
+            ${{ steps.govulncheck.outputs.result }}
+            > ```
+
+      # --
+      # Gopls
+
+      - name: Run `modernize (part of gopls)`
+        run: |
+          modernize -test ./... 2>&1 | awk -F ":" '{print "::notice file="$1",line="$2",title=gopls: "$4"::Use `go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -test -fix ./...` to automatically fix"}'
+
+      - name: Vet
+        run: go vet ./...

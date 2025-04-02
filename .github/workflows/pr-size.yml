@@ -1,0 +1,32 @@
+name: Label PRs with size and comment if too large
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+
+jobs:
+  size_labeler:
+    name: Label PRs with size and comment if too large
+    permissions:
+      pull-requests: write
+      contents: read
+      issues: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: codelytv/pr-size-labeler@1c3422395d899286d5ee2c809fd5aed264d5eb9b # v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          message_if_xl: >
+            This PR exceeds the recommended size of 1,000 lines. Please make sure you are NOT addressing multiple issues with one PR. Note this PR might be rejected due to its size.
+          files_to_ignore: |
+            "go.mod"
+            "go.sum"
+            "mocks/*"
