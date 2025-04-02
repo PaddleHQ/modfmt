@@ -1,9 +1,13 @@
-package main
+package modfmt_test
 
 import (
 	"os"
 	"testing"
 
+	"github.com/PaddleHQ/modfmt/pkg/modfmt"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/modfile"
 )
 
@@ -14,46 +18,37 @@ const (
 
 func TestMergeRequires(t *testing.T) {
 	// fmt the go.mod file
-	updatedContents, err := MergeRequires(testFileName)
-	if err != nil {
-		t.Fatal(err)
-	}
+	updatedContents, err := modfmt.MergeRequires(testFileName)
+	require.NoError(t, err)
 
 	// create a new file with the updated contents
 	newFile, err := os.Create(updatedTestFileName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer newFile.Close()
+	require.NoError(t, err)
 
-	if _, err = newFile.Write(updatedContents); err != nil {
-		t.Fatal(err)
-	}
+	defer func() {
+		err := newFile.Close()
+		assert.NoError(t, err)
+	}()
+
+	_, err = newFile.Write(updatedContents)
+	require.NoError(t, err)
 
 	// parse the old go.mod file
 	oldContents, err := os.ReadFile(testFileName)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	oldmod, err := modfile.ParseLax(testFileName, oldContents, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// parse the updated go.mod file
 	newContents, err := os.ReadFile(updatedTestFileName)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	newmod, err := modfile.ParseLax(updatedTestFileName, newContents, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Check if both mod reqs have the same length
-	if len(oldmod.Require) != len(newmod.Require) {
-		t.Errorf("Require length mismatch: %d != %d", len(oldmod.Require), len(newmod.Require))
-	}
+	assert.Equal(t, len(oldmod.Require), len(newmod.Require))
 
 	// Check if both mod reqs have the same content
 	for _, req := range oldmod.Require {

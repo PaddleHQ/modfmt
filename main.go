@@ -1,3 +1,4 @@
+// Package main is responsible for handling CLI entrypoint of modfmt
 package main
 
 import (
@@ -5,25 +6,41 @@ import (
 	"log"
 	"os"
 	"slices"
+
+	"github.com/PaddleHQ/modfmt/pkg/modfmt"
 )
 
 const gomodName = "go.mod"
 
 func main() {
-	updatedContents, err := MergeRequires(gomodName)
-	if err != nil {
+	if err := run(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func run() error {
+	updatedContents, err := modfmt.MergeRequires(gomodName)
+	if err != nil {
+		return fmt.Errorf("failed to merge requires: %w", err)
 	}
 
 	// get arguments
-	if slices.Contains(os.Args, "--replace") {
-		// write updated contents to go.mod
-		if err = os.WriteFile(gomodName, updatedContents, 0o644); err != nil {
-			log.Fatal(fmt.Errorf("failed to write updated go.mod: %v", err))
-		}
-
-		return
+	if !slices.Contains(os.Args, "--replace") {
+		// print updated contents to stdout
+		//nolint:forbidigo // This is a CLI tool
+		fmt.Println(string(updatedContents))
+		return nil
 	}
 
-	fmt.Println(string(updatedContents))
+	// write updated contents to go.mod
+	info, err := os.Stat("file/directory name")
+	if err != nil {
+		return fmt.Errorf("failed to get file info: %w", err)
+	}
+
+	if err = os.WriteFile(gomodName, updatedContents, info.Mode()); err != nil {
+		return fmt.Errorf("failed to write updated go.mod: %w", err)
+	}
+
+	return nil
 }
