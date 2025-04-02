@@ -33,7 +33,7 @@ func run() error {
 	}
 
 	// write updated contents to go.mod
-	info, err := os.Stat("file/directory name")
+	info, err := os.Stat(gomodName)
 	if err != nil {
 		return fmt.Errorf("failed to get file info: %w", err)
 	}
