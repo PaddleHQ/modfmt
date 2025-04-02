@@ -1,29 +1,33 @@
-package main
+// Package modfmt provides methods for formatting go.mod files
+package modfmt
 
 import (
+	"fmt"
 	"os"
 
 	"golang.org/x/mod/modfile"
 )
 
+// MergeRequires takes a go.mod file and merges all the require blocks into one.
 func MergeRequires(goModFilename string) ([]byte, error) {
+	//nolint:gosec // this is just used to read the go.mod file
 	contents, err := os.ReadFile(goModFilename)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[modfmt] failed to read go.mod file: %w", err)
 	}
 
 	mod, err := modfile.ParseLax(goModFilename, contents, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[modfmt] failed to parse go.mod file: %w", err)
 	}
 
 	if err := mergeRequires(mod); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[modfmt] failed to merge requires: %w", err)
 	}
 
 	updatedContents, err := mod.Format()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[modfmt] failed to format go.mod file: %w", err)
 	}
 
 	return updatedContents, nil
@@ -45,7 +49,9 @@ func mergeRequires(mod *modfile.File) (err error) {
 		allRequires[i] = *reqs
 
 		// while removing them from the original slice
-		mod.DropRequire(reqs.Mod.Path)
+		if err := mod.DropRequire(reqs.Mod.Path); err != nil {
+			return fmt.Errorf("failed to drop require %s: %w", reqs.Mod.Path, err)
+		}
 	}
 
 	// Cleanup the modfile
