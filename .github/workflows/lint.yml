@@ -1,4 +1,4 @@
-name: Ensure code passes linting rules
+name: Lint
 
 on:
   pull_request:

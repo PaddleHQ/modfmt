@@ -1,4 +1,4 @@
-name: Ensure code can build
+name: Build
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   validate:
-    name: Run code validation checks
+    name: Ensure code can build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

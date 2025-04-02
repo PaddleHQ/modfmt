@@ -1,4 +1,4 @@
-name: Ensure SemVer Label is added
+name: SemVer
 
 on:
   pull_request:
