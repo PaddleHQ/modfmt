@@ -48,7 +48,7 @@ func TestMergeRequires(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check if both mod reqs have the same length
-	assert.Equal(t, len(oldmod.Require), len(newmod.Require))
+	assert.Len(t, newmod.Require, len(oldmod.Require))
 
 	// Check if both mod reqs have the same content
 	for _, req := range oldmod.Require {
