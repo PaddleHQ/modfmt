@@ -1,52 +1,50 @@
-name: SemVer
+# DO NOT EDIT: This file should only be modified in the `go-public-library-template` repo.
+
+name: Ensure SemVer Label is added
 
 on:
+  merge_group:
   pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - labeled
-      - unlabeled
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
-  issues: read
-  pull-requests: read
-
-env:
-  VALID_SEMVER_LABELS: norelease,release:major,release:minor,release:patch
+  contents: read
 
 jobs:
   check_semver:
     name: Ensure SemVer Label is added
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      - name: Harden the runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
-          egress-policy: audit
+          egress-policy: block
+          # The job makes no outbound calls. One host is listed because an empty allowlist configures no rules at all.
+          allowed-endpoints: >
+            github.com:443
 
-      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
-        with:
-          script: |
-            const validLabels = process.env.VALID_SEMVER_LABELS.split(",");
-            const { data: labelResultList } = await github.rest.issues.listLabelsOnIssue({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number
-            });
+      - name: Require exactly one SemVer label
+        # The label is checked on the PR; the merge queue re-runs the same commit.
+        if: github.event_name == 'pull_request'
+        env:
+          VALID_LABELS: norelease release:major release:minor release:patch
+        run: |
+          found=$(jq -r --arg valid "$VALID_LABELS" \
+            '[.pull_request.labels[].name | select(. as $l | $valid | split(" ") | index($l))] | join(" ")' \
+            "$GITHUB_EVENT_PATH")
+          count=$(wc -w <<< "$found")
 
-            const prLabels = labelResultList.map(label => label.name);
-            const semverLabels = prLabels.filter(value => validLabels.includes(value));
-
-            core.info(`Valid labels: ${validLabels.join(" | ")}`);
-            core.info(`PR labels: ${prLabels.join(" | ")}`);
-            core.info(`Semver Labels: ${semverLabels.join(" | ")}`);
-
-            if (semverLabels.length == 0) {
-              core.setFailed("You must add a SemVer label of one of ${validLabels.join(" | ")} to this PR");
-            }
-
-            if (semverLabels.length > 1) {
-              core.setFailed("You must only add one SemVer label to this PR");
-            }
+          if [ "$count" -eq 0 ]; then
+            echo "::error::Add one SemVer label to this PR: ${VALID_LABELS// / | }"
+            exit 1
+          fi
+          if [ "$count" -gt 1 ]; then
+            echo "::error::Only one SemVer label is allowed, found: ${found}"
+            exit 1
+          fi
+          echo "SemVer label: ${found}"
